@@ -11,10 +11,10 @@ Each row of the report contains:
 * Host name of primary node of replica set
 * Port of primary node of replica set
 * Minimum oplog window over the reporting period, in hours
-* Hour of minimum oplog window, a truncated ISO date, e.g. 2021-08-26T10
+* Hour of minimum oplog window, a truncated ISO date, e.g. 2021-08-26T10, in GMT
 * Average oplog window over the reporting period, in hours
 * Maximum oplog generation rate, in GB per hour
-* Hour of maximum oplog rate, a truncated ISO date, e.g. 2021-08-26T10
+* Hour of maximum oplog rate, a truncated ISO date, e.g. 2021-08-26T10, in GMT
 * Average oplog generation rate, in GB per hour
 
 Paused clusters are included in the report but will not have any metrics data.
