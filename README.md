@@ -17,7 +17,8 @@ Each row of the report contains:
 * Hour of maximum oplog rate, a truncated ISO date, e.g. 2021-08-26T10, in GMT
 * Average oplog generation rate, in GB per hour
 
-Paused clusters are included in the report but will not have any metrics data.
+Paused clusters are included in the report but will not have any metrics data. Free and shared tier clusters are not
+not included.
 
 An API Key is required to call the Atlas API. This can be generated at either the organization or project level. 
 OplogWatch reads a single key pair from environment variables ATLAS_PUBLIC_KEY and ATLAS_PRIVATE_KEY. 
