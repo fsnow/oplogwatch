@@ -25,7 +25,7 @@ func main() {
 
 	client := mongodbatlas.NewClient(tc)
 
-	fmt.Println("Project ID,Project Name,Cluster ID, Cluster Name,Oplog Size (MB),Primary Host,Port,Oplog Window, Oplog Rate")
+	fmt.Println("Project ID,Project Name,Cluster ID, Cluster Name,Oplog Size (MB),Primary Host,Port,Min Window (hrs), Min Hour (Z), Avg Window (hrs), Max Rate (GB / hr), Max Hour (Z), Avg Rate (GB / hr)")
 	moreProjects := true
 	projPage := 1
 	itemsPerPage := 50
@@ -132,11 +132,15 @@ func main() {
 					thisCluster := clusterMap[lcClusterName]
 					//fmt.Println("Cluster name: ", thisCluster.Name)
 
-					thisOplogSize := clusterOplogSizeMap[lcClusterName]
+					oplogSize := clusterOplogSizeMap[lcClusterName]
+					oplogSizeStr := ""
+					if oplogSize > 0 {
+						oplogSizeStr = strconv.Itoa(int(oplogSize))
+					}
 
-					processFields := []string{thisCluster.ID, thisCluster.Name, strconv.Itoa(int(thisOplogSize)), process.Hostname, strconv.Itoa(process.Port)}
+					processFields := []string{thisCluster.ID, thisCluster.Name, oplogSizeStr, process.Hostname, strconv.Itoa(process.Port)}
 
-					hours := 4
+					hours := 24
 
 					var pmListOptPrimary = mongodbatlas.ProcessMeasurementListOptions{
 						Granularity: "PT1H",
@@ -145,14 +149,8 @@ func main() {
 						Start: time.Now().Add(time.Hour*time.Duration(-hours)).Format("2006-01-02T15") + ":00:00Z",
 						M:     []string{"OPLOG_MASTER_TIME", "OPLOG_RATE_GB_PER_HOUR"},
 					}
-
-					/*
-						var pmListOptSecondary = mongodbatlas.ProcessMeasurementListOptions{
-							Granularity: "PT1M",
-							Period:      "PT15M",
-							M:           []string{"OPLOG_MASTER_TIME", "OPLOG_RATE_GB_PER_HOUR", "OPLOG_SLAVE_LAG_MASTER_TIME", "OPLOG_MASTER_LAG_TIME_DIFF"},
-						}
-					*/
+					// These fields are available on the secondary
+					// M:           []string{"OPLOG_MASTER_TIME", "OPLOG_RATE_GB_PER_HOUR", "OPLOG_SLAVE_LAG_MASTER_TIME", "OPLOG_MASTER_LAG_TIME_DIFF"},
 
 					// Get process measurements for the process
 					processMeasurements, _, err := client.ProcessMeasurements.List(context.Background(), project.ID, process.Hostname, process.Port, &pmListOptPrimary)
@@ -164,13 +162,15 @@ func main() {
 						continue
 					}
 
-					//fmt.Println("Process measurements: ", processMeasurements)
-
 					windowTotal := 0
 					windowCount := 0
+					windowMin := int(^uint(0) >> 1)
+					windowMinHour := ""
 
-					rateTotal := 0
+					rateTotal := float32(0.0)
 					rateCount := 0
+					rateMax := float32(0.0)
+					rateMaxHour := ""
 
 					for _, measurement := range (*processMeasurements).Measurements {
 						if d {
@@ -185,14 +185,24 @@ func main() {
 										fmt.Println(dataPoint.Timestamp, int(*dataPoint.Value))
 									}
 									oplogWindowTimes[hour] = true
-									windowTotal += int(*dataPoint.Value)
+									window := int(*dataPoint.Value)
+									windowTotal += window
+									if window < windowMin {
+										windowMin = window
+										windowMinHour = hour
+									}
 									windowCount++
 								} else {
 									if d {
 										fmt.Println(dataPoint.Timestamp, *dataPoint.Value)
 									}
 									oplogRateTimes[hour] = true
-									rateTotal += int(*dataPoint.Value)
+									rate := *dataPoint.Value
+									rateTotal += rate
+									if rate > rateMax {
+										rateMax = rate
+										rateMaxHour = hour
+									}
 									rateCount++
 								}
 							}
@@ -203,17 +213,22 @@ func main() {
 					fields = append(projectFields, processFields...)
 
 					if windowCount > 0 {
-						windowAvg := float64(windowTotal) / float64(windowCount)
-						fields = append(fields, strconv.FormatFloat(windowAvg, 'f', 0, 32))
+						windowMinHrs := float64(windowMin) / 3600.0
+						fields = append(fields, strconv.FormatFloat(windowMinHrs, 'f', 2, 32))
+						fields = append(fields, windowMinHour)
+						windowAvg := float64(windowTotal) / float64(windowCount) / 3600.0
+						fields = append(fields, strconv.FormatFloat(windowAvg, 'f', 2, 32))
 					} else {
-						fields = append(fields, "")
+						fields = append(fields, "", "", "")
 					}
 
 					if rateCount > 0 {
+						fields = append(fields, strconv.FormatFloat(float64(rateMax), 'f', 6, 32))
+						fields = append(fields, rateMaxHour)
 						rateAvg := float64(rateTotal) / float64(rateCount)
 						fields = append(fields, strconv.FormatFloat(rateAvg, 'f', 6, 32))
 					} else {
-						fields = append(fields, "")
+						fields = append(fields, "", "")
 					}
 
 					fmt.Println(strings.Join(fields, ","))
