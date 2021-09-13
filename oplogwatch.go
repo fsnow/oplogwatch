@@ -25,12 +25,16 @@ func main() {
 
 	client := mongodbatlas.NewClient(tc)
 
-	fmt.Println("Project ID,Project Name,Cluster ID, Cluster Name,Oplog Size (MB),Primary Host,Port,Min Window (hrs), Min Hour (Z), Avg Window (hrs), Max Rate (GB / hr), Max Hour (Z), Avg Rate (GB / hr)")
+	// header row
+	fmt.Println("Project ID,Project Name,Cluster ID,Cluster Name,Oplog Size (MB),Primary Host,Port,Min Window (hrs),Min Hour (Z),Avg Window (hrs),Max Rate (GB / hr),Max Hour (Z),Avg Rate (GB / hr)")
+
+	// project-level paging params
 	moreProjects := true
 	projPage := 1
 	itemsPerPage := 50
 
 	// maps as sets to store the unique timestamp values. e.g. if hourly, keys will be, e.g., 2021-08-19T18
+	// (not using yet)
 	oplogWindowTimes := make(map[string]bool)
 	oplogRateTimes := make(map[string]bool)
 
@@ -69,9 +73,9 @@ func main() {
 			}
 
 			projectFields := []string{project.ID, project.Name}
-			//fmt.Println(strings.Join(projectFields, ","))
 
-			// Get clusters in the project
+			// Get clusters in the project. Paging is not needed. Clusters.List() defaults to returning 100,
+			// but Clusters per Atlas Project is limited to 25
 			clusters, _, err := client.Clusters.List(context.Background(), project.ID, nil)
 			if err != nil {
 				log.Fatalf("Clusters.List returned error: %v", err)
@@ -102,7 +106,17 @@ func main() {
 			}
 
 			// Get processes in the project
-			processes, _, err := client.Processes.List(context.Background(), project.ID, nil)
+			// Unlike projects above, processes does not have a TotalCount field. Does Processes.List even support paging?
+			// Just to be safe, we'll set the page size to the max, 500
+
+			var processListOptions = mongodbatlas.ProcessesListOptions{
+				ListOptions: mongodbatlas.ListOptions{
+					PageNum:      1,
+					ItemsPerPage: 500,
+				},
+			}
+
+			processes, _, err := client.Processes.List(context.Background(), project.ID, &processListOptions)
 			if err != nil {
 				log.Fatalf("Processes.List returned error: %v", err)
 			}
@@ -121,7 +135,7 @@ func main() {
 						fmt.Println("UserAlias: ", process.UserAlias)
 					}
 
-					// not sure yet why this can be empty. Maybe during cluster creation ?
+					// Not sure yet why this can be empty. Maybe during cluster creation ? I hit this once and crashed on later code.
 					if len(process.UserAlias) == 0 {
 						continue
 					}
@@ -149,8 +163,8 @@ func main() {
 						Start: time.Now().Add(time.Hour*time.Duration(-hours)).Format("2006-01-02T15") + ":00:00Z",
 						M:     []string{"OPLOG_MASTER_TIME", "OPLOG_RATE_GB_PER_HOUR"},
 					}
-					// These fields are available on the secondary
-					// M:           []string{"OPLOG_MASTER_TIME", "OPLOG_RATE_GB_PER_HOUR", "OPLOG_SLAVE_LAG_MASTER_TIME", "OPLOG_MASTER_LAG_TIME_DIFF"},
+					// These fields are available on the secondary:
+					// M:    []string{"OPLOG_MASTER_TIME", "OPLOG_RATE_GB_PER_HOUR", "OPLOG_SLAVE_LAG_MASTER_TIME", "OPLOG_MASTER_LAG_TIME_DIFF"},
 
 					// Get process measurements for the process
 					processMeasurements, _, err := client.ProcessMeasurements.List(context.Background(), project.ID, process.Hostname, process.Port, &pmListOptPrimary)
