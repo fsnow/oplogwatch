@@ -144,6 +144,10 @@ func main() {
 					lastIndex := strings.LastIndex(process.UserAlias, "-shard-")
 					lcClusterName := process.UserAlias[0:lastIndex]
 					thisCluster := clusterMap[lcClusterName]
+					if thisCluster == nil {
+						fmt.Fprintln(os.Stderr, "Cluster is nil for cluster name: ", lcClusterName)
+						continue
+					}
 					//fmt.Println("Cluster name: ", thisCluster.Name)
 
 					oplogSize := clusterOplogSizeMap[lcClusterName]
